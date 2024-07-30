@@ -1,11 +1,24 @@
-# The base image is expected to contain
-# /bin/opm (with a serve subcommand) and /bin/grpc_health_probe
+# The base image is expected to contain /bin/opm (with a serve subcommand) and /bin/grpc_health_probe
+FROM registry.redhat.io/openshift4/ose-operator-registry:v4.14 as builder
+
+ARG CONTROLLER=controller:latest
+
+WORKDIR /tmp/fbc
+COPY . .
+RUN ls -laR /tmp/fbc
+USER 0
+# Need to be able to update the files with sed and they're mounted as owned by root, so we become root for this sed command
+# Trim spaces in the $CONTROLLER argument to ensure the sed operation works.
+RUN find . -name "*.yaml" -exec sed -i 's#controller:latest#'$(echo $CONTROLLER | xargs )'#' {} +
+
 FROM registry.redhat.io/openshift4/ose-operator-registry:v4.14
 
 ENTRYPOINT ["/bin/opm"]
 CMD ["serve", "/configs", "--cache-dir=/tmp/cache"]
 
-ADD catalog/ /configs
+COPY --from=builder /tmp/fbc/catalog/ /configs
+
+RUN ls -laR /configs; find /configs -name "*.yaml" -exec cat {} +
 RUN ["/bin/opm", "serve", "/configs", "--cache-dir=/tmp/cache", "--cache-only"]
 
 # Core bundle labels.
@@ -19,4 +32,3 @@ LABEL operators.operatorframework.io.metrics.builder=operator-sdk-v1.33.1
 LABEL operators.operatorframework.io.metrics.mediatype.v1=metrics+v1
 LABEL operators.operatorframework.io.metrics.project_layout=go.kubebuilder.io/v3
 LABEL operators.operatorframework.io.index.configs.v1=/configs
-
